@@ -8,6 +8,8 @@ export interface PaymentProps {
   amount: number;
   paymentMethod: PaymentMethod;
   status: PaymentStatus;
+  preferenceId: string | null;
+  checkoutUrl: string | null;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -38,4 +40,13 @@ export abstract class PaymentRepository {
   abstract update(payment: Payment): Promise<void>;
   abstract findById(id: string): Promise<Payment | null>;
   abstract findAll(filters: PaymentFilters): Promise<Payment[]>;
+}
+
+export interface PaymentCheckout {
+  preferenceId: string;
+  checkoutUrl: string;
+}
+
+export abstract class PaymentGateway {
+  abstract createCheckout(payment: Payment): Promise<PaymentCheckout>;
 }

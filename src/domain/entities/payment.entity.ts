@@ -2,13 +2,16 @@ import { randomUUID } from 'crypto';
 import { PAYMENT_STATUS_TRANSITIONS } from '../constants/payment.constant';
 import { PaymentMethod, PaymentStatus } from '../enums/payment.enum';
 import {
+  CheckoutNotAllowedError,
   InvalidAmountError,
   InvalidDescriptionError,
   InvalidStatusTransitionError,
+  PaymentAmountLockedError,
   PaymentNotEditableError,
 } from '../errors/payment.error';
 import {
   CreatePaymentProps,
+  PaymentCheckout,
   PaymentProps,
   UpdatePaymentDetails,
 } from '../interfaces/payment.interface';
@@ -27,6 +30,8 @@ export class Payment {
       amount: Payment.validateAmount(data.amount),
       paymentMethod: data.paymentMethod,
       status: PaymentStatus.PENDING,
+      preferenceId: null,
+      checkoutUrl: null,
       createdAt: now,
       updatedAt: now,
     });
@@ -60,6 +65,14 @@ export class Payment {
     return this.props.status;
   }
 
+  get preferenceId(): string | null {
+    return this.props.preferenceId;
+  }
+
+  get checkoutUrl(): string | null {
+    return this.props.checkoutUrl;
+  }
+
   get createdAt(): Date {
     return this.props.createdAt;
   }
@@ -91,6 +104,22 @@ export class Payment {
     this.changeStatus(PaymentStatus.FAIL);
   }
 
+  attachCheckout(checkout: PaymentCheckout): void {
+    if (this.props.paymentMethod !== PaymentMethod.CREDIT_CARD) {
+      throw new CheckoutNotAllowedError(
+        'only CREDIT_CARD payments have checkout',
+      );
+    }
+
+    if (this.props.status !== PaymentStatus.PENDING) {
+      throw new CheckoutNotAllowedError(`payment is ${this.props.status}`);
+    }
+
+    this.props.preferenceId = checkout.preferenceId;
+    this.props.checkoutUrl = checkout.checkoutUrl;
+    this.touch();
+  }
+
   updateDetails(data: UpdatePaymentDetails): void {
     if (data.description === undefined && data.amount === undefined) return;
 
@@ -98,14 +127,22 @@ export class Payment {
       throw new PaymentNotEditableError(this.props.status);
     }
 
-    if (data.description !== undefined) {
-      this.props.description = Payment.validateDescription(data.description);
+    if (data.amount !== undefined && this.props.checkoutUrl) {
+      throw new PaymentAmountLockedError();
     }
 
-    if (data.amount !== undefined) {
-      this.props.amount = Payment.validateAmount(data.amount);
-    }
+    const description =
+      data.description !== undefined
+        ? Payment.validateDescription(data.description)
+        : this.props.description;
 
+    const amount =
+      data.amount !== undefined
+        ? Payment.validateAmount(data.amount)
+        : this.props.amount;
+
+    this.props.description = description;
+    this.props.amount = amount;
     this.touch();
   }
 

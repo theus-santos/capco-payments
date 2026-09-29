@@ -4,10 +4,12 @@ import {
   PaymentStatus,
 } from '../../../src/domain/enums/payment.enum';
 import {
+  CheckoutNotAllowedError,
   InvalidAmountError,
   InvalidCpfError,
   InvalidDescriptionError,
   InvalidStatusTransitionError,
+  PaymentAmountLockedError,
   PaymentNotEditableError,
 } from '../../../src/domain/errors/payment.error';
 import { CreatePaymentProps } from '../../../src/domain/interfaces/payment.interface';
@@ -20,6 +22,12 @@ const makePayment = (data: Partial<CreatePaymentProps> = {}) =>
     paymentMethod: PaymentMethod.PIX,
     ...data,
   });
+
+const checkout = {
+  preferenceId: 'pref-123',
+  checkoutUrl:
+    'https://www.mercadopago.com.br/checkout/v1/redirect?pref_id=pref-123',
+};
 
 describe('Payment', () => {
   describe('create', () => {
@@ -118,6 +126,62 @@ describe('Payment', () => {
 
       expect(() => payment.updateDetails({ amount: 1 })).toThrow(
         PaymentNotEditableError,
+      );
+    });
+
+    it('should not change anything when one of the fields is invalid', () => {
+      const payment = makePayment();
+
+      expect(() =>
+        payment.updateDetails({ description: 'New description', amount: -1 }),
+      ).toThrow(InvalidAmountError);
+      expect(payment.description).toBe('Monthly subscription');
+    });
+
+    it('should not allow changing the amount after checkout is created', () => {
+      const payment = makePayment({ paymentMethod: PaymentMethod.CREDIT_CARD });
+      payment.attachCheckout(checkout);
+
+      expect(() => payment.updateDetails({ amount: 1 })).toThrow(
+        PaymentAmountLockedError,
+      );
+    });
+
+    it('should allow changing the description after checkout is created', () => {
+      const payment = makePayment({ paymentMethod: PaymentMethod.CREDIT_CARD });
+      payment.attachCheckout(checkout);
+
+      payment.updateDetails({ description: 'New description' });
+
+      expect(payment.description).toBe('New description');
+    });
+  });
+
+  describe('attachCheckout', () => {
+    it('should attach Mercado Pago checkout to a CREDIT_CARD payment', () => {
+      const payment = makePayment({ paymentMethod: PaymentMethod.CREDIT_CARD });
+
+      payment.attachCheckout(checkout);
+
+      expect(payment.preferenceId).toBe('pref-123');
+      expect(payment.checkoutUrl).toBe(checkout.checkoutUrl);
+      expect(payment.status).toBe(PaymentStatus.PENDING);
+    });
+
+    it('should not attach checkout to a PIX payment', () => {
+      const payment = makePayment({ paymentMethod: PaymentMethod.PIX });
+
+      expect(() => payment.attachCheckout(checkout)).toThrow(
+        CheckoutNotAllowedError,
+      );
+    });
+
+    it('should not attach checkout to a finished payment', () => {
+      const payment = makePayment({ paymentMethod: PaymentMethod.CREDIT_CARD });
+      payment.markAsFailed();
+
+      expect(() => payment.attachCheckout(checkout)).toThrow(
+        CheckoutNotAllowedError,
       );
     });
   });

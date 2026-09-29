@@ -6,9 +6,13 @@ import {
 import {
   InvalidCpfError,
   InvalidStatusTransitionError,
+  PaymentGatewayError,
   PaymentNotFoundError,
 } from '../../../src/domain/errors/payment.error';
-import { PaymentRepository } from '../../../src/domain/interfaces/payment.interface';
+import {
+  PaymentGateway,
+  PaymentRepository,
+} from '../../../src/domain/interfaces/payment.interface';
 import { PaymentService } from '../../../src/services/payment.service';
 
 const makePayment = () =>
@@ -19,8 +23,15 @@ const makePayment = () =>
     paymentMethod: PaymentMethod.PIX,
   });
 
+const checkout = {
+  preferenceId: 'pref-123',
+  checkoutUrl:
+    'https://www.mercadopago.com.br/checkout/v1/redirect?pref_id=pref-123',
+};
+
 describe('PaymentService', () => {
   let paymentRepository: jest.Mocked<PaymentRepository>;
+  let paymentGateway: jest.Mocked<PaymentGateway>;
   let service: PaymentService;
 
   beforeEach(() => {
@@ -30,11 +41,14 @@ describe('PaymentService', () => {
       findById: jest.fn(),
       findAll: jest.fn(),
     };
-    service = new PaymentService(paymentRepository);
+    paymentGateway = {
+      createCheckout: jest.fn(),
+    };
+    service = new PaymentService(paymentRepository, paymentGateway);
   });
 
   describe('create', () => {
-    it('should create a PENDING payment and save it', async () => {
+    it('should create a PIX payment as PENDING without calling the gateway', async () => {
       const payment = await service.create({
         cpf: '529.982.247-25',
         description: 'Order #1',
@@ -43,7 +57,47 @@ describe('PaymentService', () => {
       });
 
       expect(payment.status).toBe(PaymentStatus.PENDING);
+      expect(payment.checkoutUrl).toBeNull();
       expect(paymentRepository.create).toHaveBeenCalledWith(payment);
+      expect(paymentGateway.createCheckout).not.toHaveBeenCalled();
+      expect(paymentRepository.update).not.toHaveBeenCalled();
+    });
+
+    it('should create a CREDIT_CARD payment with Mercado Pago checkout', async () => {
+      paymentGateway.createCheckout.mockResolvedValue(checkout);
+
+      const payment = await service.create({
+        cpf: '529.982.247-25',
+        description: 'Order #1',
+        amount: 50,
+        paymentMethod: PaymentMethod.CREDIT_CARD,
+      });
+
+      expect(paymentRepository.create).toHaveBeenCalledWith(payment);
+      expect(paymentGateway.createCheckout).toHaveBeenCalledWith(payment);
+      expect(paymentRepository.update).toHaveBeenCalledWith(payment);
+      expect(payment.status).toBe(PaymentStatus.PENDING);
+      expect(payment.preferenceId).toBe('pref-123');
+      expect(payment.checkoutUrl).toBe(checkout.checkoutUrl);
+    });
+
+    it('should mark CREDIT_CARD payment as FAIL when Mercado Pago fails', async () => {
+      paymentGateway.createCheckout.mockRejectedValue(
+        new PaymentGatewayError('unauthorized'),
+      );
+
+      await expect(
+        service.create({
+          cpf: '529.982.247-25',
+          description: 'Order #1',
+          amount: 50,
+          paymentMethod: PaymentMethod.CREDIT_CARD,
+        }),
+      ).rejects.toThrow(PaymentGatewayError);
+
+      const failed = paymentRepository.update.mock.calls[0][0];
+      expect(failed.status).toBe(PaymentStatus.FAIL);
+      expect(failed.checkoutUrl).toBeNull();
     });
 
     it('should not save when data is invalid', async () => {

@@ -1,6 +1,7 @@
 import { ArgumentsHost } from '@nestjs/common';
 import {
   InvalidAmountError,
+  PaymentGatewayError,
   PaymentNotFoundError,
 } from '../../../src/domain/errors/payment.error';
 import { DomainExceptionFilter } from '../../../src/utils/domain-exception.filter';
@@ -37,6 +38,18 @@ describe('DomainExceptionFilter', () => {
       expect.objectContaining({
         statusCode: 422,
         error: 'InvalidAmountError',
+      }),
+    );
+  });
+
+  it('should return 502 for PaymentGatewayError', () => {
+    filter.catch(new PaymentGatewayError('timeout'), host);
+
+    expect(response.status).toHaveBeenCalledWith(502);
+    expect(response.json).toHaveBeenCalledWith(
+      expect.objectContaining({
+        statusCode: 502,
+        error: 'PaymentGatewayError',
       }),
     );
   });

@@ -34,6 +34,12 @@ export class PaymentModel extends Model {
   })
   declare status: PaymentStatus;
 
+  @Column({ type: DataType.STRING(100), allowNull: true })
+  declare preferenceId: string | null;
+
+  @Column({ type: DataType.STRING(500), allowNull: true })
+  declare checkoutUrl: string | null;
+
   @Column({ type: DataType.DATE, allowNull: false })
   declare createdAt: Date;
 

@@ -1,7 +1,11 @@
 import { Module } from '@nestjs/common';
 import { SequelizeModule } from '@nestjs/sequelize';
 import { PaymentController } from '../controllers/payment.controller';
-import { PaymentRepository } from '../domain/interfaces/payment.interface';
+import {
+  PaymentGateway,
+  PaymentRepository,
+} from '../domain/interfaces/payment.interface';
+import { MercadoPagoGateway } from '../integrations/mercado-pago.gateway';
 import { PaymentModel } from '../models/payment.model';
 import { SequelizePaymentRepository } from '../repositories/payment.repository';
 import { PaymentService } from '../services/payment.service';
@@ -14,6 +18,10 @@ import { PaymentService } from '../services/payment.service';
     {
       provide: PaymentRepository,
       useClass: SequelizePaymentRepository,
+    },
+    {
+      provide: PaymentGateway,
+      useClass: MercadoPagoGateway,
     },
   ],
   exports: [PaymentService],

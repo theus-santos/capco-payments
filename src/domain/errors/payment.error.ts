@@ -37,3 +37,21 @@ export class PaymentNotFoundError extends DomainError {
     super(`Payment ${id} not found`);
   }
 }
+
+export class CheckoutNotAllowedError extends DomainError {
+  constructor(reason: string) {
+    super(`Checkout not allowed: ${reason}`);
+  }
+}
+
+export class PaymentAmountLockedError extends DomainError {
+  constructor() {
+    super('Amount cannot be changed after the checkout is created');
+  }
+}
+
+export class PaymentGatewayError extends DomainError {
+  constructor(message: string) {
+    super(`Payment gateway error: ${message}`);
+  }
+}

@@ -1,9 +1,11 @@
 import { Injectable } from '@nestjs/common';
 import { Payment } from '../domain/entities/payment.entity';
+import { PaymentMethod } from '../domain/enums/payment.enum';
 import { PaymentNotFoundError } from '../domain/errors/payment.error';
 import {
   CreatePaymentProps,
   PaymentFilters,
+  PaymentGateway,
   PaymentRepository,
   UpdatePaymentProps,
 } from '../domain/interfaces/payment.interface';
@@ -11,12 +13,19 @@ import { Cpf } from '../domain/value-objects/cpf';
 
 @Injectable()
 export class PaymentService {
-  constructor(private readonly paymentRepository: PaymentRepository) {}
+  constructor(
+    private readonly paymentRepository: PaymentRepository,
+    private readonly paymentGateway: PaymentGateway,
+  ) {}
 
   async create(data: CreatePaymentProps): Promise<Payment> {
     const payment = Payment.create(data);
 
     await this.paymentRepository.create(payment);
+
+    if (payment.paymentMethod === PaymentMethod.CREDIT_CARD) {
+      await this.startCheckout(payment);
+    }
 
     return payment;
   }
@@ -53,5 +62,18 @@ export class PaymentService {
       cpf: filters.cpf ? Cpf.create(filters.cpf).value : undefined,
       paymentMethod: filters.paymentMethod,
     });
+  }
+
+  private async startCheckout(payment: Payment): Promise<void> {
+    try {
+      const checkout = await this.paymentGateway.createCheckout(payment);
+      payment.attachCheckout(checkout);
+    } catch (error) {
+      payment.markAsFailed();
+      await this.paymentRepository.update(payment);
+      throw error;
+    }
+
+    await this.paymentRepository.update(payment);
   }
 }

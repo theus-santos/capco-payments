@@ -4,8 +4,12 @@ import request from 'supertest';
 import { App } from 'supertest/types';
 import { setupApp } from '../../src/config/app.config';
 import { PaymentController } from '../../src/controllers/payment.controller';
-import { PaymentRepository } from '../../src/domain/interfaces/payment.interface';
+import {
+  PaymentGateway,
+  PaymentRepository,
+} from '../../src/domain/interfaces/payment.interface';
 import { PaymentService } from '../../src/services/payment.service';
+import { FakePaymentGateway } from '../utils/fake-payment.gateway';
 import { InMemoryPaymentRepository } from '../utils/in-memory-payment.repository';
 
 const validPayment = {
@@ -17,13 +21,17 @@ const validPayment = {
 
 describe('Payment (e2e)', () => {
   let app: INestApplication<App>;
+  let paymentGateway: FakePaymentGateway;
 
   beforeEach(async () => {
+    paymentGateway = new FakePaymentGateway();
+
     const moduleRef = await Test.createTestingModule({
       controllers: [PaymentController],
       providers: [
         PaymentService,
         { provide: PaymentRepository, useClass: InMemoryPaymentRepository },
+        { provide: PaymentGateway, useValue: paymentGateway },
       ],
     }).compile();
 
@@ -51,6 +59,37 @@ describe('Payment (e2e)', () => {
         paymentMethod: 'PIX',
         status: 'PENDING',
       });
+    });
+
+    it('should create a CREDIT_CARD payment with checkout url', async () => {
+      const response = await createPayment({
+        ...validPayment,
+        paymentMethod: 'CREDIT_CARD',
+      }).expect(201);
+
+      expect(response.body).toMatchObject({
+        paymentMethod: 'CREDIT_CARD',
+        status: 'PENDING',
+        preferenceId: `pref-${response.body.id}`,
+        checkoutUrl: expect.stringContaining('mercadopago.com.br'),
+      });
+    });
+
+    it('should return 502 and save as FAIL when Mercado Pago fails', async () => {
+      paymentGateway.shouldFail = true;
+
+      await createPayment({
+        ...validPayment,
+        paymentMethod: 'CREDIT_CARD',
+      }).expect(502);
+
+      const { body } = await request(app.getHttpServer())
+        .get('/api/payment')
+        .query({ paymentMethod: 'CREDIT_CARD' })
+        .expect(200);
+
+      expect(body).toHaveLength(1);
+      expect(body[0].status).toBe('FAIL');
     });
 
     it.each([

@@ -34,6 +34,8 @@ export class SequelizePaymentRepository extends PaymentRepository {
         description: data.description,
         amount: data.amount.toFixed(2),
         status: data.status,
+        preferenceId: data.preferenceId,
+        checkoutUrl: data.checkoutUrl,
         updatedAt: data.updatedAt,
       },
       { where: { id: data.id } },
@@ -68,6 +70,8 @@ export class SequelizePaymentRepository extends PaymentRepository {
       amount: Number(model.amount),
       paymentMethod: model.paymentMethod,
       status: model.status,
+      preferenceId: model.preferenceId,
+      checkoutUrl: model.checkoutUrl,
       createdAt: model.createdAt,
       updatedAt: model.updatedAt,
     });
