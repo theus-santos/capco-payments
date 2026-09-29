@@ -1,0 +1,32 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: capco-postgres
+    environment:
+      POSTGRES_USER: ${DB_USER:-capco}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-capco}
+      POSTGRES_DB: ${DB_NAME:-payments}
+    ports:
+      - '${DB_PORT:-5432}:5432'
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: pg_isready -U ${DB_USER:-capco} -d ${DB_NAME:-payments}
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  temporal:
+    image: temporalio/temporal:latest
+    container_name: capco-temporal
+    user: root
+    command: server start-dev --ip 0.0.0.0 --db-filename /data/temporal.db
+    ports:
+      - '7233:7233'
+      - '8233:8233'
+    volumes:
+      - temporal-data:/data
+
+volumes:
+  postgres-data:
+  temporal-data:
