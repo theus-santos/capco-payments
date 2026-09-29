@@ -43,6 +43,7 @@ describe('PaymentService', () => {
     };
     paymentGateway = {
       createCheckout: jest.fn(),
+      findTransaction: jest.fn(),
     };
     service = new PaymentService(paymentRepository, paymentGateway);
   });
@@ -210,6 +211,125 @@ describe('PaymentService', () => {
     it('should throw when the CPF filter is invalid', async () => {
       await expect(service.findAll({ cpf: '123' })).rejects.toThrow(
         InvalidCpfError,
+      );
+    });
+  });
+  describe('handleGatewayNotification', () => {
+    const makeCardPayment = () => {
+      const payment = Payment.create({
+        cpf: '529.982.247-25',
+        description: 'Order #1',
+        amount: 50,
+        paymentMethod: PaymentMethod.CREDIT_CARD,
+      });
+      payment.attachCheckout(checkout);
+      return payment;
+    };
+
+    it('should mark the payment as PAID when Mercado Pago approves it', async () => {
+      const payment = makeCardPayment();
+      paymentGateway.findTransaction.mockResolvedValue({
+        paymentId: payment.id,
+        status: PaymentStatus.PAID,
+      });
+      paymentRepository.findById.mockResolvedValue(payment);
+
+      await service.handleGatewayNotification('mp-123');
+
+      expect(paymentGateway.findTransaction).toHaveBeenCalledWith('mp-123');
+      expect(paymentRepository.findById).toHaveBeenCalledWith(payment.id);
+      expect(payment.status).toBe(PaymentStatus.PAID);
+      expect(paymentRepository.update).toHaveBeenCalledWith(payment);
+    });
+
+    it('should mark the payment as FAIL when Mercado Pago rejects it', async () => {
+      const payment = makeCardPayment();
+      paymentGateway.findTransaction.mockResolvedValue({
+        paymentId: payment.id,
+        status: PaymentStatus.FAIL,
+      });
+      paymentRepository.findById.mockResolvedValue(payment);
+
+      await service.handleGatewayNotification('mp-123');
+
+      expect(payment.status).toBe(PaymentStatus.FAIL);
+      expect(paymentRepository.update).toHaveBeenCalledWith(payment);
+    });
+
+    it('should do nothing while Mercado Pago payment is still pending', async () => {
+      const payment = makeCardPayment();
+      paymentGateway.findTransaction.mockResolvedValue({
+        paymentId: payment.id,
+        status: PaymentStatus.PENDING,
+      });
+      paymentRepository.findById.mockResolvedValue(payment);
+
+      await service.handleGatewayNotification('mp-123');
+
+      expect(payment.status).toBe(PaymentStatus.PENDING);
+      expect(paymentRepository.update).not.toHaveBeenCalled();
+    });
+
+    it('should ignore repeated notifications', async () => {
+      const payment = makeCardPayment();
+      payment.markAsPaid();
+      paymentGateway.findTransaction.mockResolvedValue({
+        paymentId: payment.id,
+        status: PaymentStatus.PAID,
+      });
+      paymentRepository.findById.mockResolvedValue(payment);
+
+      await service.handleGatewayNotification('mp-123');
+
+      expect(paymentRepository.update).not.toHaveBeenCalled();
+    });
+
+    it('should not change a finished payment', async () => {
+      const payment = makeCardPayment();
+      payment.markAsPaid();
+      paymentGateway.findTransaction.mockResolvedValue({
+        paymentId: payment.id,
+        status: PaymentStatus.FAIL,
+      });
+      paymentRepository.findById.mockResolvedValue(payment);
+
+      await service.handleGatewayNotification('mp-123');
+
+      expect(payment.status).toBe(PaymentStatus.PAID);
+      expect(paymentRepository.update).not.toHaveBeenCalled();
+    });
+
+    it('should ignore transactions without payment reference', async () => {
+      paymentGateway.findTransaction.mockResolvedValue({
+        paymentId: null,
+        status: PaymentStatus.PAID,
+      });
+
+      await service.handleGatewayNotification('mp-123');
+
+      expect(paymentRepository.findById).not.toHaveBeenCalled();
+      expect(paymentRepository.update).not.toHaveBeenCalled();
+    });
+
+    it('should ignore transactions of unknown payments', async () => {
+      paymentGateway.findTransaction.mockResolvedValue({
+        paymentId: 'unknown',
+        status: PaymentStatus.PAID,
+      });
+      paymentRepository.findById.mockResolvedValue(null);
+
+      await service.handleGatewayNotification('mp-123');
+
+      expect(paymentRepository.update).not.toHaveBeenCalled();
+    });
+
+    it('should propagate gateway errors so Mercado Pago retries', async () => {
+      paymentGateway.findTransaction.mockRejectedValue(
+        new PaymentGatewayError('timeout'),
+      );
+
+      await expect(service.handleGatewayNotification('mp-123')).rejects.toThrow(
+        PaymentGatewayError,
       );
     });
   });

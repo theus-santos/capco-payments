@@ -1,7 +1,10 @@
 import { ConfigService } from '@nestjs/config';
-import { Preference } from 'mercadopago';
+import { Payment as MercadoPagoPayment, Preference } from 'mercadopago';
 import { Payment } from '../../../src/domain/entities/payment.entity';
-import { PaymentMethod } from '../../../src/domain/enums/payment.enum';
+import {
+  PaymentMethod,
+  PaymentStatus,
+} from '../../../src/domain/enums/payment.enum';
 import { PaymentGatewayError } from '../../../src/domain/errors/payment.error';
 import { MercadoPagoGateway } from '../../../src/integrations/mercado-pago.gateway';
 
@@ -22,9 +25,16 @@ const makePayment = () =>
 
 describe('MercadoPagoGateway', () => {
   let createPreference: jest.Mock;
+  let getPayment: jest.Mock;
 
   beforeEach(() => {
     createPreference = jest.fn();
+    getPayment = jest.fn();
+    jest
+      .mocked(MercadoPagoPayment)
+      .mockImplementation(
+        () => ({ get: getPayment }) as unknown as MercadoPagoPayment,
+      );
     jest
       .mocked(Preference)
       .mockImplementation(
@@ -99,5 +109,42 @@ describe('MercadoPagoGateway', () => {
     await expect(makeGateway().createCheckout(makePayment())).rejects.toThrow(
       PaymentGatewayError,
     );
+  });
+
+  describe('findTransaction', () => {
+    it.each([
+      ['approved', PaymentStatus.PAID],
+      ['rejected', PaymentStatus.FAIL],
+      ['cancelled', PaymentStatus.FAIL],
+      ['pending', PaymentStatus.PENDING],
+      ['in_process', PaymentStatus.PENDING],
+    ])('should map Mercado Pago status %s to %s', async (mpStatus, status) => {
+      getPayment.mockResolvedValue({
+        id: 123,
+        status: mpStatus,
+        external_reference: 'payment-id',
+      });
+
+      const transaction = await makeGateway().findTransaction('123');
+
+      expect(getPayment).toHaveBeenCalledWith({ id: '123' });
+      expect(transaction).toEqual({ paymentId: 'payment-id', status });
+    });
+
+    it('should return null paymentId when there is no external reference', async () => {
+      getPayment.mockResolvedValue({ id: 123, status: 'approved' });
+
+      const transaction = await makeGateway().findTransaction('123');
+
+      expect(transaction.paymentId).toBeNull();
+    });
+
+    it('should throw PaymentGatewayError when Mercado Pago fails', async () => {
+      getPayment.mockRejectedValue({ message: 'not found' });
+
+      await expect(makeGateway().findTransaction('123')).rejects.toThrow(
+        new PaymentGatewayError('not found'),
+      );
+    });
   });
 });

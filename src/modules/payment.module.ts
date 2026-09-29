@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { SequelizeModule } from '@nestjs/sequelize';
+import { MercadoPagoWebhookController } from '../controllers/mercado-pago-webhook.controller';
 import { PaymentController } from '../controllers/payment.controller';
 import {
   PaymentGateway,
@@ -12,7 +13,7 @@ import { PaymentService } from '../services/payment.service';
 
 @Module({
   imports: [SequelizeModule.forFeature([PaymentModel])],
-  controllers: [PaymentController],
+  controllers: [PaymentController, MercadoPagoWebhookController],
   providers: [
     PaymentService,
     {

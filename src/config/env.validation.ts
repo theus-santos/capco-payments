@@ -17,5 +17,6 @@ export const envValidationSchema = Joi.object({
   TEMPORAL_TASK_QUEUE: Joi.string().default('payments'),
 
   MERCADOPAGO_ACCESS_TOKEN: Joi.string().allow('').default(''),
+  MERCADOPAGO_WEBHOOK_SECRET: Joi.string().allow('').default(''),
   APP_PUBLIC_URL: Joi.string().uri().default('http://localhost:3000'),
 });

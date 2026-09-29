@@ -47,6 +47,12 @@ export interface PaymentCheckout {
   checkoutUrl: string;
 }
 
+export interface GatewayTransaction {
+  paymentId: string | null;
+  status: PaymentStatus;
+}
+
 export abstract class PaymentGateway {
   abstract createCheckout(payment: Payment): Promise<PaymentCheckout>;
+  abstract findTransaction(transactionId: string): Promise<GatewayTransaction>;
 }

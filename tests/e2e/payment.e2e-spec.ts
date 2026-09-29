@@ -1,9 +1,12 @@
 import { INestApplication } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { Test } from '@nestjs/testing';
 import request from 'supertest';
 import { App } from 'supertest/types';
 import { setupApp } from '../../src/config/app.config';
+import { MercadoPagoWebhookController } from '../../src/controllers/mercado-pago-webhook.controller';
 import { PaymentController } from '../../src/controllers/payment.controller';
+import { PaymentStatus } from '../../src/domain/enums/payment.enum';
 import {
   PaymentGateway,
   PaymentRepository,
@@ -27,11 +30,12 @@ describe('Payment (e2e)', () => {
     paymentGateway = new FakePaymentGateway();
 
     const moduleRef = await Test.createTestingModule({
-      controllers: [PaymentController],
+      controllers: [PaymentController, MercadoPagoWebhookController],
       providers: [
         PaymentService,
         { provide: PaymentRepository, useClass: InMemoryPaymentRepository },
         { provide: PaymentGateway, useValue: paymentGateway },
+        { provide: ConfigService, useValue: { get: () => '' } },
       ],
     }).compile();
 
@@ -248,6 +252,77 @@ describe('Payment (e2e)', () => {
         .get('/api/payment')
         .query({ cpf: '123' })
         .expect(400);
+    });
+  });
+  describe('POST /api/payment/webhook', () => {
+    const notify = (transactionId: string) =>
+      request(app.getHttpServer())
+        .post('/api/payment/webhook')
+        .query({ 'data.id': transactionId, type: 'payment' })
+        .send({
+          action: 'payment.updated',
+          type: 'payment',
+          data: { id: transactionId },
+        });
+
+    const createCardPayment = async () => {
+      const response = await createPayment({
+        ...validPayment,
+        paymentMethod: 'CREDIT_CARD',
+      }).expect(201);
+      return response.body as { id: string };
+    };
+
+    it('should mark the payment as PAID when Mercado Pago approves it', async () => {
+      const created = await createCardPayment();
+      paymentGateway.transactions.set('mp-1', {
+        paymentId: created.id,
+        status: PaymentStatus.PAID,
+      });
+
+      await notify('mp-1').expect(200);
+
+      const { body } = await request(app.getHttpServer())
+        .get(`/api/payment/${created.id}`)
+        .expect(200);
+      expect(body.status).toBe('PAID');
+    });
+
+    it('should mark the payment as FAIL when Mercado Pago rejects it', async () => {
+      const created = await createCardPayment();
+      paymentGateway.transactions.set('mp-2', {
+        paymentId: created.id,
+        status: PaymentStatus.FAIL,
+      });
+
+      await notify('mp-2').expect(200);
+
+      const { body } = await request(app.getHttpServer())
+        .get(`/api/payment/${created.id}`)
+        .expect(200);
+      expect(body.status).toBe('FAIL');
+    });
+
+    it('should accept repeated notifications', async () => {
+      const created = await createCardPayment();
+      paymentGateway.transactions.set('mp-3', {
+        paymentId: created.id,
+        status: PaymentStatus.PAID,
+      });
+
+      await notify('mp-3').expect(200);
+      await notify('mp-3').expect(200);
+    });
+
+    it('should ignore notifications that are not about payments', async () => {
+      await request(app.getHttpServer())
+        .post('/api/payment/webhook')
+        .send({ type: 'merchant_order', data: { id: '999' } })
+        .expect(200);
+    });
+
+    it('should return 502 when Mercado Pago lookup fails so it retries', async () => {
+      await notify('unknown-transaction').expect(502);
     });
   });
 });
