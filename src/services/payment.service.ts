@@ -16,7 +16,7 @@ export class PaymentService {
   async create(data: CreatePaymentProps): Promise<Payment> {
     const payment = Payment.create(data);
 
-    await this.paymentRepository.save(payment);
+    await this.paymentRepository.create(payment);
 
     return payment;
   }
@@ -33,7 +33,7 @@ export class PaymentService {
       payment.changeStatus(data.status);
     }
 
-    await this.paymentRepository.save(payment);
+    await this.paymentRepository.update(payment);
 
     return payment;
   }

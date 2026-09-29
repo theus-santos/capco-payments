@@ -34,7 +34,8 @@ export interface PaymentFilters {
 }
 
 export abstract class PaymentRepository {
-  abstract save(payment: Payment): Promise<void>;
+  abstract create(payment: Payment): Promise<void>;
+  abstract update(payment: Payment): Promise<void>;
   abstract findById(id: string): Promise<Payment | null>;
   abstract findAll(filters: PaymentFilters): Promise<Payment[]>;
 }

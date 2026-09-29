@@ -17,13 +17,27 @@ export class SequelizePaymentRepository extends PaymentRepository {
     super();
   }
 
-  async save(payment: Payment): Promise<void> {
+  async create(payment: Payment): Promise<void> {
     const data = payment.toJSON();
 
-    await this.paymentModel.upsert({
+    await this.paymentModel.create({
       ...data,
       amount: data.amount.toFixed(2),
     });
+  }
+
+  async update(payment: Payment): Promise<void> {
+    const data = payment.toJSON();
+
+    await this.paymentModel.update(
+      {
+        description: data.description,
+        amount: data.amount.toFixed(2),
+        status: data.status,
+        updatedAt: data.updatedAt,
+      },
+      { where: { id: data.id } },
+    );
   }
 
   async findById(id: string): Promise<Payment | null> {

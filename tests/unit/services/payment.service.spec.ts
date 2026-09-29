@@ -25,7 +25,8 @@ describe('PaymentService', () => {
 
   beforeEach(() => {
     paymentRepository = {
-      save: jest.fn(),
+      create: jest.fn(),
+      update: jest.fn(),
       findById: jest.fn(),
       findAll: jest.fn(),
     };
@@ -42,7 +43,7 @@ describe('PaymentService', () => {
       });
 
       expect(payment.status).toBe(PaymentStatus.PENDING);
-      expect(paymentRepository.save).toHaveBeenCalledWith(payment);
+      expect(paymentRepository.create).toHaveBeenCalledWith(payment);
     });
 
     it('should not save when data is invalid', async () => {
@@ -55,7 +56,7 @@ describe('PaymentService', () => {
         }),
       ).rejects.toThrow(InvalidCpfError);
 
-      expect(paymentRepository.save).not.toHaveBeenCalled();
+      expect(paymentRepository.create).not.toHaveBeenCalled();
     });
   });
 
@@ -90,7 +91,7 @@ describe('PaymentService', () => {
       expect(updated.description).toBe('New description');
       expect(updated.amount).toBe(10);
       expect(updated.status).toBe(PaymentStatus.PAID);
-      expect(paymentRepository.save).toHaveBeenCalledWith(payment);
+      expect(paymentRepository.update).toHaveBeenCalledWith(payment);
     });
 
     it('should update only the status', async () => {
@@ -114,7 +115,7 @@ describe('PaymentService', () => {
         service.update(payment.id, { status: PaymentStatus.PENDING }),
       ).rejects.toThrow(InvalidStatusTransitionError);
 
-      expect(paymentRepository.save).not.toHaveBeenCalled();
+      expect(paymentRepository.update).not.toHaveBeenCalled();
     });
 
     it('should throw when payment does not exist', async () => {

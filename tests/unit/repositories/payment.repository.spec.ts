@@ -21,15 +21,25 @@ const makeRow = (data: Partial<PaymentModel> = {}) =>
 
 describe('SequelizePaymentRepository', () => {
   let paymentModel: {
-    upsert: jest.Mock;
+    create: jest.Mock;
+    update: jest.Mock;
     findByPk: jest.Mock;
     findAll: jest.Mock;
   };
   let repository: SequelizePaymentRepository;
 
+  const makePayment = () =>
+    Payment.create({
+      cpf: '529.982.247-25',
+      description: 'Order #1',
+      amount: 10.5,
+      paymentMethod: PaymentMethod.CREDIT_CARD,
+    });
+
   beforeEach(() => {
     paymentModel = {
-      upsert: jest.fn(),
+      create: jest.fn(),
+      update: jest.fn(),
       findByPk: jest.fn(),
       findAll: jest.fn(),
     };
@@ -38,21 +48,35 @@ describe('SequelizePaymentRepository', () => {
     );
   });
 
-  describe('save', () => {
-    it('should upsert the payment with amount as decimal string', async () => {
-      const payment = Payment.create({
-        cpf: '529.982.247-25',
-        description: 'Order #1',
-        amount: 10.5,
-        paymentMethod: PaymentMethod.CREDIT_CARD,
-      });
+  describe('create', () => {
+    it('should insert the payment with amount as decimal string', async () => {
+      const payment = makePayment();
 
-      await repository.save(payment);
+      await repository.create(payment);
 
-      expect(paymentModel.upsert).toHaveBeenCalledWith({
+      expect(paymentModel.create).toHaveBeenCalledWith({
         ...payment.toJSON(),
         amount: '10.50',
       });
+    });
+  });
+
+  describe('update', () => {
+    it('should update only the editable fields', async () => {
+      const payment = makePayment();
+      payment.markAsPaid();
+
+      await repository.update(payment);
+
+      expect(paymentModel.update).toHaveBeenCalledWith(
+        {
+          description: 'Order #1',
+          amount: '10.50',
+          status: PaymentStatus.PAID,
+          updatedAt: payment.updatedAt,
+        },
+        { where: { id: payment.id } },
+      );
     });
   });
 

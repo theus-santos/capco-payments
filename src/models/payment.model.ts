@@ -1,15 +1,13 @@
 import {
   Column,
-  CreatedAt,
   DataType,
   Model,
   PrimaryKey,
   Table,
-  UpdatedAt,
 } from 'sequelize-typescript';
 import { PaymentMethod, PaymentStatus } from '../domain/enums/payment.enum';
 
-@Table({ tableName: 'payments', underscored: true })
+@Table({ tableName: 'payments', underscored: true, timestamps: false })
 export class PaymentModel extends Model {
   @PrimaryKey
   @Column(DataType.UUID)
@@ -36,9 +34,9 @@ export class PaymentModel extends Model {
   })
   declare status: PaymentStatus;
 
-  @CreatedAt
+  @Column({ type: DataType.DATE, allowNull: false })
   declare createdAt: Date;
 
-  @UpdatedAt
+  @Column({ type: DataType.DATE, allowNull: false })
   declare updatedAt: Date;
 }
