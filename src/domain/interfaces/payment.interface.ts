@@ -1,3 +1,4 @@
+import { Payment } from '../entities/payment.entity';
 import { PaymentMethod, PaymentStatus } from '../enums/payment.enum';
 
 export interface PaymentProps {
@@ -21,4 +22,15 @@ export interface CreatePaymentProps {
 export interface UpdatePaymentDetails {
   description?: string;
   amount?: number;
+}
+
+export interface PaymentFilters {
+  cpf?: string;
+  paymentMethod?: PaymentMethod;
+}
+
+export abstract class PaymentRepository {
+  abstract save(payment: Payment): Promise<void>;
+  abstract findById(id: string): Promise<Payment | null>;
+  abstract findAll(filters: PaymentFilters): Promise<Payment[]>;
 }
