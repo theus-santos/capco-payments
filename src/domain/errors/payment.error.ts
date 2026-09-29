@@ -31,3 +31,9 @@ export class PaymentNotEditableError extends DomainError {
     super(`Payment with status ${status} can no longer be edited`);
   }
 }
+
+export class PaymentNotFoundError extends DomainError {
+  constructor(id: string) {
+    super(`Payment ${id} not found`);
+  }
+}

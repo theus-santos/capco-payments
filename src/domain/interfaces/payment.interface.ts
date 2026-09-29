@@ -24,6 +24,10 @@ export interface UpdatePaymentDetails {
   amount?: number;
 }
 
+export interface UpdatePaymentProps extends UpdatePaymentDetails {
+  status?: PaymentStatus;
+}
+
 export interface PaymentFilters {
   cpf?: string;
   paymentMethod?: PaymentMethod;
