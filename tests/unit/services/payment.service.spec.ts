@@ -12,6 +12,7 @@ import {
 import {
   PaymentGateway,
   PaymentRepository,
+  PaymentWorkflow,
 } from '../../../src/domain/interfaces/payment.interface';
 import { PaymentService } from '../../../src/services/payment.service';
 
@@ -32,6 +33,7 @@ const checkout = {
 describe('PaymentService', () => {
   let paymentRepository: jest.Mocked<PaymentRepository>;
   let paymentGateway: jest.Mocked<PaymentGateway>;
+  let paymentWorkflow: jest.Mocked<PaymentWorkflow>;
   let service: PaymentService;
 
   beforeEach(() => {
@@ -44,8 +46,17 @@ describe('PaymentService', () => {
     paymentGateway = {
       createCheckout: jest.fn(),
       findTransaction: jest.fn(),
+      isPaymentApproved: jest.fn(),
     };
-    service = new PaymentService(paymentRepository, paymentGateway);
+    paymentWorkflow = {
+      start: jest.fn(),
+      notify: jest.fn(),
+    };
+    service = new PaymentService(
+      paymentRepository,
+      paymentGateway,
+      paymentWorkflow,
+    );
   });
 
   describe('create', () => {
@@ -64,8 +75,13 @@ describe('PaymentService', () => {
       expect(paymentRepository.update).not.toHaveBeenCalled();
     });
 
-    it('should create a CREDIT_CARD payment with Mercado Pago checkout', async () => {
-      paymentGateway.createCheckout.mockResolvedValue(checkout);
+    it('should start the Temporal workflow for CREDIT_CARD payments', async () => {
+      paymentRepository.findById.mockImplementation((id) => {
+        const payment = paymentRepository.create.mock.calls[0][0];
+        payment.attachCheckout(checkout);
+        return Promise.resolve(payment.id === id ? payment : null);
+      });
+      paymentWorkflow.start.mockResolvedValue(checkout);
 
       const payment = await service.create({
         cpf: '529.982.247-25',
@@ -75,16 +91,18 @@ describe('PaymentService', () => {
       });
 
       expect(paymentRepository.create).toHaveBeenCalledWith(payment);
-      expect(paymentGateway.createCheckout).toHaveBeenCalledWith(payment);
-      expect(paymentRepository.update).toHaveBeenCalledWith(payment);
+      expect(paymentWorkflow.start).toHaveBeenCalledWith(payment.id);
+      expect(paymentGateway.createCheckout).not.toHaveBeenCalled();
       expect(payment.status).toBe(PaymentStatus.PENDING);
-      expect(payment.preferenceId).toBe('pref-123');
       expect(payment.checkoutUrl).toBe(checkout.checkoutUrl);
     });
 
-    it('should mark CREDIT_CARD payment as FAIL when Mercado Pago fails', async () => {
-      paymentGateway.createCheckout.mockRejectedValue(
-        new PaymentGatewayError('unauthorized'),
+    it('should mark CREDIT_CARD payment as FAIL when the workflow fails', async () => {
+      paymentRepository.findById.mockImplementation(() =>
+        Promise.resolve(paymentRepository.create.mock.calls[0][0]),
+      );
+      paymentWorkflow.start.mockRejectedValue(
+        new PaymentGatewayError('checkout could not be created'),
       );
 
       await expect(
@@ -98,7 +116,26 @@ describe('PaymentService', () => {
 
       const failed = paymentRepository.update.mock.calls[0][0];
       expect(failed.status).toBe(PaymentStatus.FAIL);
-      expect(failed.checkoutUrl).toBeNull();
+    });
+
+    it('should return 502 error when Temporal is unavailable', async () => {
+      paymentRepository.findById.mockImplementation(() =>
+        Promise.resolve(paymentRepository.create.mock.calls[0][0]),
+      );
+      paymentWorkflow.start.mockRejectedValue(new Error('connection refused'));
+
+      await expect(
+        service.create({
+          cpf: '529.982.247-25',
+          description: 'Order #1',
+          amount: 50,
+          paymentMethod: PaymentMethod.CREDIT_CARD,
+        }),
+      ).rejects.toThrow(PaymentGatewayError);
+
+      expect(paymentRepository.update.mock.calls[0][0].status).toBe(
+        PaymentStatus.FAIL,
+      );
     });
 
     it('should not save when data is invalid', async () => {
@@ -215,6 +252,24 @@ describe('PaymentService', () => {
     });
   });
   describe('handleGatewayNotification', () => {
+    beforeEach(() => {
+      paymentWorkflow.notify.mockResolvedValue(false);
+    });
+
+    it('should signal the running workflow instead of updating directly', async () => {
+      paymentGateway.findTransaction.mockResolvedValue({
+        paymentId: 'payment-id',
+        status: PaymentStatus.PAID,
+      });
+      paymentWorkflow.notify.mockResolvedValue(true);
+
+      await service.handleGatewayNotification('mp-123');
+
+      expect(paymentWorkflow.notify).toHaveBeenCalledWith('payment-id');
+      expect(paymentRepository.findById).not.toHaveBeenCalled();
+      expect(paymentRepository.update).not.toHaveBeenCalled();
+    });
+
     const makeCardPayment = () => {
       const payment = Payment.create({
         cpf: '529.982.247-25',

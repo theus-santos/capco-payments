@@ -11,7 +11,7 @@ import { MercadoPagoSignatureGuard } from '../integrations/mercado-pago-signatur
 import type {
   MercadoPagoNotification,
   MercadoPagoNotificationQuery,
-} from '../integrations/mercado-pago.interface';
+} from '../interfaces/mercado-pago.interface';
 import { PaymentService } from '../services/payment.service';
 
 @Controller('payment/webhook')

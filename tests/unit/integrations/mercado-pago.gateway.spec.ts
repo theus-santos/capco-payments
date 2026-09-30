@@ -26,15 +26,19 @@ const makePayment = () =>
 describe('MercadoPagoGateway', () => {
   let createPreference: jest.Mock;
   let getPayment: jest.Mock;
+  let searchPayments: jest.Mock;
 
   beforeEach(() => {
     createPreference = jest.fn();
     getPayment = jest.fn();
-    jest
-      .mocked(MercadoPagoPayment)
-      .mockImplementation(
-        () => ({ get: getPayment }) as unknown as MercadoPagoPayment,
-      );
+    searchPayments = jest.fn();
+    jest.mocked(MercadoPagoPayment).mockImplementation(
+      () =>
+        ({
+          get: getPayment,
+          search: searchPayments,
+        }) as unknown as MercadoPagoPayment,
+    );
     jest
       .mocked(Preference)
       .mockImplementation(
@@ -145,6 +149,45 @@ describe('MercadoPagoGateway', () => {
       await expect(makeGateway().findTransaction('123')).rejects.toThrow(
         new PaymentGatewayError('not found'),
       );
+    });
+  });
+
+  describe('isPaymentApproved', () => {
+    it('should return true when there is an approved payment', async () => {
+      searchPayments.mockResolvedValue({
+        results: [{ status: 'rejected' }, { status: 'approved' }],
+      });
+
+      await expect(makeGateway().isPaymentApproved('payment-id')).resolves.toBe(
+        true,
+      );
+      expect(searchPayments).toHaveBeenCalledWith({
+        options: { external_reference: 'payment-id' },
+      });
+    });
+
+    it('should return false when no payment was approved', async () => {
+      searchPayments.mockResolvedValue({ results: [{ status: 'rejected' }] });
+
+      await expect(makeGateway().isPaymentApproved('payment-id')).resolves.toBe(
+        false,
+      );
+    });
+
+    it('should return false when there are no payments yet', async () => {
+      searchPayments.mockResolvedValue({});
+
+      await expect(makeGateway().isPaymentApproved('payment-id')).resolves.toBe(
+        false,
+      );
+    });
+
+    it('should throw PaymentGatewayError when Mercado Pago fails', async () => {
+      searchPayments.mockRejectedValue({ message: 'timeout' });
+
+      await expect(
+        makeGateway().isPaymentApproved('payment-id'),
+      ).rejects.toThrow(PaymentGatewayError);
     });
   });
 });

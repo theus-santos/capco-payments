@@ -7,7 +7,7 @@ import {
 import { ConfigService } from '@nestjs/config';
 import { Request } from 'express';
 import { WebhookSignatureValidator } from 'mercadopago';
-import { MercadoPagoNotificationQuery } from './mercado-pago.interface';
+import { MercadoPagoNotificationQuery } from '../interfaces/mercado-pago.interface';
 
 @Injectable()
 export class MercadoPagoSignatureGuard implements CanActivate {

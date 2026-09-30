@@ -8,6 +8,7 @@ import {
 
 export class FakePaymentGateway extends PaymentGateway {
   shouldFail = false;
+  readonly approvedPayments = new Set<string>();
   readonly transactions = new Map<string, GatewayTransaction>();
 
   createCheckout(payment: Payment): Promise<PaymentCheckout> {
@@ -29,5 +30,9 @@ export class FakePaymentGateway extends PaymentGateway {
     }
 
     return Promise.resolve(transaction);
+  }
+
+  isPaymentApproved(paymentId: string): Promise<boolean> {
+    return Promise.resolve(this.approvedPayments.has(paymentId));
   }
 }

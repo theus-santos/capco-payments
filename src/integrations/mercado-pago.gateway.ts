@@ -13,7 +13,7 @@ import {
   PaymentCheckout,
   PaymentGateway,
 } from '../domain/interfaces/payment.interface';
-import { MERCADO_PAGO_STATUS } from './mercado-pago.constant';
+import { MERCADO_PAGO_STATUS } from '../constants/mercado-pago.constant';
 
 @Injectable()
 export class MercadoPagoGateway extends PaymentGateway {
@@ -93,6 +93,21 @@ export class MercadoPagoGateway extends PaymentGateway {
         status:
           MERCADO_PAGO_STATUS[response.status ?? ''] ?? PaymentStatus.PENDING,
       };
+    } catch (error) {
+      throw new PaymentGatewayError(this.getErrorMessage(error));
+    }
+  }
+
+  async isPaymentApproved(paymentId: string): Promise<boolean> {
+    try {
+      const response = await this.mercadoPagoPayment.search({
+        options: { external_reference: paymentId },
+      });
+
+      return (response.results ?? []).some(
+        (result) =>
+          MERCADO_PAGO_STATUS[result.status ?? ''] === PaymentStatus.PAID,
+      );
     } catch (error) {
       throw new PaymentGatewayError(this.getErrorMessage(error));
     }

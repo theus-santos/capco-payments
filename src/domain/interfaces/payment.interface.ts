@@ -55,4 +55,10 @@ export interface GatewayTransaction {
 export abstract class PaymentGateway {
   abstract createCheckout(payment: Payment): Promise<PaymentCheckout>;
   abstract findTransaction(transactionId: string): Promise<GatewayTransaction>;
+  abstract isPaymentApproved(paymentId: string): Promise<boolean>;
+}
+
+export abstract class PaymentWorkflow {
+  abstract start(paymentId: string): Promise<PaymentCheckout>;
+  abstract notify(paymentId: string): Promise<boolean>;
 }

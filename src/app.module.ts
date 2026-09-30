@@ -3,6 +3,7 @@ import { ConfigModule } from '@nestjs/config';
 import { envValidationSchema } from './config/env.validation';
 import { DatabaseModule } from './modules/database.module';
 import { PaymentModule } from './modules/payment.module';
+import { TemporalModule } from './modules/temporal.module';
 
 @Module({
   imports: [
@@ -11,6 +12,7 @@ import { PaymentModule } from './modules/payment.module';
       validationSchema: envValidationSchema,
     }),
     DatabaseModule,
+    TemporalModule,
     PaymentModule,
   ],
 })

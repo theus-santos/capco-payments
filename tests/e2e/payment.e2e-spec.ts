@@ -10,9 +10,11 @@ import { PaymentStatus } from '../../src/domain/enums/payment.enum';
 import {
   PaymentGateway,
   PaymentRepository,
+  PaymentWorkflow,
 } from '../../src/domain/interfaces/payment.interface';
 import { PaymentService } from '../../src/services/payment.service';
 import { FakePaymentGateway } from '../utils/fake-payment.gateway';
+import { FakePaymentWorkflow } from '../utils/fake-payment.workflow';
 import { InMemoryPaymentRepository } from '../utils/in-memory-payment.repository';
 
 const validPayment = {
@@ -35,6 +37,14 @@ describe('Payment (e2e)', () => {
         PaymentService,
         { provide: PaymentRepository, useClass: InMemoryPaymentRepository },
         { provide: PaymentGateway, useValue: paymentGateway },
+        {
+          provide: PaymentWorkflow,
+          inject: [PaymentRepository, PaymentGateway],
+          useFactory: (
+            repository: PaymentRepository,
+            gateway: PaymentGateway,
+          ) => new FakePaymentWorkflow(repository, gateway),
+        },
         { provide: ConfigService, useValue: { get: () => '' } },
       ],
     }).compile();

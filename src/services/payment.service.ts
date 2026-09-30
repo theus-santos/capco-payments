@@ -1,12 +1,16 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Payment } from '../domain/entities/payment.entity';
 import { PaymentMethod, PaymentStatus } from '../domain/enums/payment.enum';
-import { PaymentNotFoundError } from '../domain/errors/payment.error';
+import {
+  PaymentGatewayError,
+  PaymentNotFoundError,
+} from '../domain/errors/payment.error';
 import {
   CreatePaymentProps,
   PaymentFilters,
   PaymentGateway,
   PaymentRepository,
+  PaymentWorkflow,
   UpdatePaymentProps,
 } from '../domain/interfaces/payment.interface';
 import { Cpf } from '../domain/value-objects/cpf';
@@ -18,6 +22,7 @@ export class PaymentService {
   constructor(
     private readonly paymentRepository: PaymentRepository,
     private readonly paymentGateway: PaymentGateway,
+    private readonly paymentWorkflow: PaymentWorkflow,
   ) {}
 
   async create(data: CreatePaymentProps): Promise<Payment> {
@@ -26,7 +31,8 @@ export class PaymentService {
     await this.paymentRepository.create(payment);
 
     if (payment.paymentMethod === PaymentMethod.CREDIT_CARD) {
-      await this.startCheckout(payment);
+      await this.startCreditCardWorkflow(payment.id);
+      return this.findById(payment.id);
     }
 
     return payment;
@@ -75,6 +81,10 @@ export class PaymentService {
       return;
     }
 
+    const notified = await this.paymentWorkflow.notify(transaction.paymentId);
+
+    if (notified) return;
+
     const payment = await this.paymentRepository.findById(
       transaction.paymentId,
     );
@@ -102,16 +112,20 @@ export class PaymentService {
     await this.paymentRepository.update(payment);
   }
 
-  private async startCheckout(payment: Payment): Promise<void> {
+  private async startCreditCardWorkflow(paymentId: string): Promise<void> {
     try {
-      const checkout = await this.paymentGateway.createCheckout(payment);
-      payment.attachCheckout(checkout);
+      await this.paymentWorkflow.start(paymentId);
     } catch (error) {
-      payment.markAsFailed();
-      await this.paymentRepository.update(payment);
-      throw error;
-    }
+      const payment = await this.findById(paymentId);
 
-    await this.paymentRepository.update(payment);
+      if (!payment.isFinal()) {
+        payment.markAsFailed();
+        await this.paymentRepository.update(payment);
+      }
+
+      if (error instanceof PaymentGatewayError) throw error;
+
+      throw new PaymentGatewayError('payment workflow could not be started');
+    }
   }
 }
